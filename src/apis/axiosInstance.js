@@ -14,7 +14,7 @@ export const axiosInstance = axios.create({
 // 리프레시 전용 인스턴스 (인증 서비스 경로)
 const authInstance = axios.create({
   withCredentials: true,
-  baseURL: import.meta.env.VITE_APP_BASE_URL,
+  baseURL: import.meta.env.VITE_API_AUTH_URL,
 });
 
 // -- 토큰 재발급 로직을 위한 변수들 --
@@ -56,7 +56,7 @@ axiosInstance.interceptors.response.use(
 
     if (response?.status === 401 && !originalRequest._retry) {
       // refresh 요청 자체에서 401 나면 무한 루프 방지
-      if (originalRequest.url.includes("/api/auth/user/refresh")) {
+      if (originalRequest.url.includes("/auth/user/refresh")) {
         return Promise.reject(error);
       }
 
@@ -76,18 +76,29 @@ axiosInstance.interceptors.response.use(
       // 리프레시 호출은 authInstance로, baseURL 무시
       return new Promise((resolve, reject) => {
         authInstance
-          .post("/api/auth/user/refresh")
+          .post("/auth/user/refresh")
           .then(({ data }) => {
+            // 새로운 AT를 받아서 저장
             const newToken = data.accessToken;
             setAccessToken(newToken);
             axiosInstance.defaults.headers.common.Authorization = `Bearer ${newToken}`;
             processQueue(null, newToken);
 
+            // 원래 요청에 새 토큰 붙여서 재시도
             originalRequest.headers.Authorization = `Bearer ${newToken}`;
             resolve(axiosInstance(originalRequest));
           })
           .catch((err) => {
             processQueue(err, null);
+
+            // 403(토큰탈취시) AT를 지우고 새로고침 -> 로그인 페이지로로
+            if (err.response?.status === 403) {
+              localStorage.removeItem("accessToken");
+              delete axiosInstance.defaults.headers.common.Authorization;
+
+              alert("사용자 정보 갱신에 실패했습니다. 다시 로그인해 주세요.");
+              window.location.reload();
+            }
             reject(err);
           })
           .finally(() => {
@@ -95,7 +106,6 @@ axiosInstance.interceptors.response.use(
           });
       });
     }
-
     return Promise.reject(error);
   }
 );

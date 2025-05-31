@@ -78,7 +78,7 @@ function Register() {
 
     try {
       const res = await axios.post(
-        `${import.meta.env.VITE_API_AUTH_URL}/api/auth/user/signup`, requestData);
+        `${import.meta.env.VITE_API_AUTH_URL}/auth/user/signup`, requestData);
 
       console.log("회원가입 성공:", res.data);
       setIsModalOpen(true);
